@@ -1,0 +1,49 @@
+﻿@using Markdig
+@using SessionNotebook.Markdown
+@using DataLayer.Entities
+
+@if (_nouns == null)
+{
+    <LoadingPlaceholder/>
+}
+else
+{
+    @((MarkupString)HtmlText)
+}
+
+@code {
+    private Dictionary<int, Noun> _nouns;
+
+    [Parameter]
+    public string Text { get; set; }
+
+    [Parameter]
+    public string Class { get; set; }
+
+    [Parameter]
+    public List<Noun> NounsList { get; set; }
+
+    private string HtmlText
+    {
+        get
+        {
+            var markdownText = Text;
+            var pipelineBuilder = new MarkdownPipelineBuilder().UseAutoLinks().UseBootstrap().UseEmojiAndSmiley()
+                .UseEmphasisExtras().UseGlobalization().UseGridTables().UseSoftlineBreakAsHardlineBreak()
+                .UseListExtras().UsePipeTables().UseTaskLists().DisableHtml().UseNounLinks(_nouns);
+
+            if (!string.IsNullOrEmpty(Class))
+            {
+                pipelineBuilder = pipelineBuilder.UseGenericAttributes();
+                markdownText = $"{{.{Class}}}{Text}";
+            }
+
+            return Markdown.ToHtml(markdownText, pipelineBuilder.Build());
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _nouns = NounsList.ToDictionary(n => n.Id, n => n);
+    }
+}

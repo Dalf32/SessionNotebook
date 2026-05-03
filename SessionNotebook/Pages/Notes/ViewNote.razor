@@ -1,0 +1,59 @@
+﻿@page "/note/{noteId:int}"
+@using DataLayer.Entities
+@using SessionNotebook.Data
+@using SessionNotebook.Services
+@inject NavigationManager Navigation
+@inject HistoryStack History
+@inject CampaignService CampaignService
+@inject NoteService NoteService
+@inject NounService NounService
+@inject NotebookState State
+
+@if (CurrentNote == null || _nouns == null)
+{
+    <LoadingPlaceholder OnReturnClick="Return"/>
+}
+else
+{
+    <h2>@CurrentNote.DisplayName</h2>
+    <TagSet Tags="@CurrentNote.Tags"/>
+    <hr/>
+    <div class="text-body"><MarkdownText Text="@CurrentNote.Text" NounsList="@_nouns"/></div>
+
+    <SectionContent SectionName="bottom-buttons">
+        <button @onclick="Edit" class="btn btn-primary">Edit</button>
+        <button @onclick="Return" class="btn btn-secondary">Return</button>
+    </SectionContent>
+}
+
+@code {
+    private List<Noun> _nouns;
+
+    private Note CurrentNote { get; set; }
+
+    [CascadingParameter]
+    public MainLayout Layout { get; set; }
+
+    [Parameter]
+    public int NoteId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Layout.Title = "Note";
+        History.Push(Navigation);
+
+        await State.EnsureCampaignLoaded(CampaignService, noteId: NoteId);
+        CurrentNote = await NoteService.GetNote(NoteId);
+        _nouns = await NounService.ListAllNouns(CurrentNote.Session.CampaignId);
+    }
+
+    private void Return()
+    {
+        History.GoBack(Navigation, $"/session/{CurrentNote.SessionId}");
+    }
+
+    private void Edit()
+    {
+        Navigation.NavigateTo($"/note/{NoteId}/edit");
+    }
+}

@@ -1,0 +1,234 @@
+﻿@page "/note/new"
+@page "/note/{noteId:int}/edit"
+@using System.Text.RegularExpressions
+@using DataLayer.Entities
+@using SessionNotebook.Services
+@using SessionNotebook.Data
+@inject NavigationManager Navigation
+@inject CampaignService CampaignService
+@inject NoteService NoteService
+@inject TagService TagService
+@inject NounService NounService
+@inject NotebookState State
+@inject IJSRuntime JsRuntime
+
+@if ((IsEdit && CurrentNote == null) || _nouns == null)
+{
+    <LoadingPlaceholder OnCancelClick="Cancel"/>
+}
+else
+{
+    <EditForm id="note-form" Model="@CurrentNote" OnValidSubmit="Save">
+        <DataAnnotationsValidator/>
+
+        <fieldset disabled="@IsDisabled">
+            <div class="form-div">
+                <label for="note-number" class="form-label">Number</label>
+                <InputNumber id="note-number" class="form-control" @bind-Value="CurrentNote.Number"/>
+                <ValidationMessage For="() => CurrentNote.Number"/>
+            </div>
+
+            <div class="form-div">
+                <label for="note-title" class="form-label">Title</label>
+                <InputText id="note-title" class="form-control" @bind-Value="CurrentNote.Title"/>
+            </div>
+
+            <div class="form-div">
+                <label for="note-tags" class="form-label">Tags</label>
+                <TagsEditor Id="note-tags" @bind-TagNames="_tagsList" AllTags="@_noteTags"/>
+            </div>
+
+            <div class="form-div">
+                <label for="note-text" class="form-label">Text</label>
+                <textarea id="note-text" class="form-control" rows="15" @ref="@NoteTextArea"
+                    value="@CurrentNote.Text" @onblur="@(_ => HideNounDropdown = true)"
+                    @oninput="NoteTextChanged" @onselectionchange="ShowHideContextMenu"
+                    onkeydown="updateCaretPosition('note-text')" onmousedown="updateCaretPosition('note-text')"></textarea>
+                <ValidationMessage For="() => CurrentNote.Text"/>
+
+                <ul class="noun-dropdown context-menu" hidden="@HideNounDropdown">
+                    @foreach (var noun in _displayedNouns.Take(10))
+                    {
+                        <li class="dropdown-item noun-dropdown-item" @onmousedown="@(_ => InsertNoun(noun.Name))">@noun.Name</li>
+                    }
+                </ul>
+            </div>
+        </fieldset>
+
+        <SectionContent SectionName="bottom-buttons">
+            <button form="note-form" type="submit" class="btn btn-success">Save</button>
+            <button class="btn btn-secondary" @onclick="Cancel">Cancel</button>
+            @if (IsEdit)
+            {
+                <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">Delete</button>
+            }
+            else
+            {
+                <div class="d-flex align-items-center gap-1">
+                    <InputCheckbox id="add-another" class="form-check-input mt-0" @bind-Value="AddAnother"/>
+                    <label for="add-another" class="form-check-label">Add another</label>
+                </div>
+            }
+        </SectionContent>
+    </EditForm>
+    
+    <DeleteModal EntityType="Note" EntityName="@CurrentNote.DisplayName" PerformDelete="@Delete"/>
+}
+
+@code {
+    private Note CurrentNote { get; set; }
+    private bool IsEdit => NoteId.HasValue;
+    private bool AddAnother { get; set; }
+    private bool IsDisabled { get; set; }
+    private bool HideNounDropdown { get; set; } = true;
+
+    private List<string> _tagsList;
+    private List<Tag> _noteTags;
+    private List<Noun> _nouns;
+    private List<Noun> _displayedNouns;
+    private int _caretPosition;
+    private string _nounFilter;
+    
+    private ElementReference NoteTextArea { get; set; }
+
+    [CascadingParameter]
+    public MainLayout Layout { get; set; }
+
+    [Parameter]
+    public int? NoteId { get; set; }
+
+    private int CampaignId => State.ActiveCampaign.Id;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        Layout.Title = "Note";
+
+        await State.EnsureCampaignLoaded(CampaignService, noteId: NoteId);
+        
+        if (IsEdit)
+        {
+            CurrentNote = await NoteService.GetNote(NoteId!.Value);
+            _tagsList = CurrentNote.Tags == null ? [] :
+                CurrentNote.Tags.Select(t => t.Name).ToList();
+        }
+        else
+        {
+            SetupNewNote();
+        }
+
+        _noteTags = await TagService.ListAllTags(CampaignId, typeof(Note));
+        _nouns = await NounService.ListAllNouns(CampaignId);
+        _displayedNouns = _nouns;
+        CurrentNote.Text = RichTextUtilities.ProcessTextForDisplay(CurrentNote.Text, _nouns);
+    }
+
+    private async Task Save(EditContext obj)
+    {
+        IsDisabled = true;
+        UpdateNoteTags();
+        var savedTags = await TagService.SaveTags(CurrentNote.Tags);
+
+        var noteNouns = RichTextUtilities.FindNounsInText(CurrentNote.Text, _nouns, CampaignId);
+        noteNouns = await NounService.SaveNouns(noteNouns);
+        CurrentNote.Text = RichTextUtilities.ProcessTextForSave(CurrentNote.Text, noteNouns);
+
+        CurrentNote = await NoteService.SaveNote(CurrentNote);
+        await NoteService.UpdateTags(CurrentNote.Id, savedTags);
+        await NoteService.UpdateNouns(CurrentNote.Id, noteNouns);
+
+        State.ClearNewObjects();
+
+        if (AddAnother)
+        {
+            State.InitializeNewNote(CurrentNote.SessionId, CurrentNote.Number + 1);
+            SetupNewNote();
+            IsDisabled = false;
+            Navigation.NavigateTo("/note/new");
+        }
+        else
+        {
+            Navigation.NavigateTo($"/note/{CurrentNote.Id}");
+        }
+    }
+
+    private void Cancel()
+    {
+        State.ClearNewObjects();
+        Navigation.NavigateTo(IsEdit ? $"/note/{CurrentNote.Id}" : $"/session/{CurrentNote.SessionId}");
+    }
+
+    private async Task Delete()
+    {
+        await NoteService.DeleteNote(CurrentNote.Id);
+        NoteId = null;
+
+        Navigation.NavigateTo($"/session/{CurrentNote.SessionId}");
+    }
+
+    private void UpdateNoteTags()
+    {
+        TagService.UpdateTags(CurrentNote.Tags, _tagsList, tn => new Tag
+        {
+            CampaignId = CampaignId,
+            Name = tn,
+            IsNoteTag = true
+        });
+    }
+
+    private void SetupNewNote()
+    {
+        CurrentNote = State.NewNote;
+        _tagsList = [];
+    }
+
+    private void NoteTextChanged(ChangeEventArgs changeEvent)
+    {
+        CurrentNote.Text = (string)changeEvent.Value;
+    }
+
+    private async Task ShowHideContextMenu()
+    {
+        _caretPosition = await JsRuntime.InvokeAsync<int>("getCaretIndex", "note-text");
+
+        var wasDropdownHidden = HideNounDropdown;
+        var nounLink = RichTextUtilities.GetNounLinkAtPosition(CurrentNote.Text, _caretPosition);
+        var isValidLink = nounLink.Length() > 0;
+        _nounFilter = string.Empty;
+
+        if (isValidLink)
+        {
+            _nounFilter = Regex.Replace(CurrentNote.Text.Substring(nounLink.Start.Value, nounLink.Length() - 1),
+                @"[@\[\]]", "");
+        }
+        
+        FilterDisplayedNouns();
+        HideNounDropdown = !isValidLink || _nounFilter.Length == 0 || _displayedNouns.Count == 0;
+        if (wasDropdownHidden != HideNounDropdown)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task InsertNoun(string nounName)
+    {
+        var nounLink = RichTextUtilities.GetNounLinkAtPosition(CurrentNote.Text, _caretPosition);
+
+        CurrentNote.Text = CurrentNote.Text.Remove(nounLink.Start.Value, nounLink.Length() - 1)
+            .Insert(nounLink.Start.Value, $"@[{nounName}]");
+        HideNounDropdown = true;
+        await NoteTextArea.FocusAsync();
+    }
+
+    private void FilterDisplayedNouns()
+    {
+        if (string.IsNullOrEmpty(_nounFilter))
+        {
+            _displayedNouns = _nouns;
+            return;
+        }
+            
+        _displayedNouns = _nouns.Where(n => n.Name.StartsWithIgnoreCase(_nounFilter))
+            .Union(_nouns.Where(n => n.Name.ContainsIgnoreCase(_nounFilter)))
+            .ToList();
+    }
+}

@@ -1,0 +1,106 @@
+﻿@using System.Globalization
+@using DataLayer.Entities
+
+<TagSet Edit="true" @bind-Tags="TagsList"/>
+<input id="@Id" class="form-control" autocomplete="off" @oninput="TagInputChanged" value="@TagsString"
+       @onblur="@AddTags"/>
+<ul class="tag-dropdown" hidden="@HideTagDropdown">
+    @foreach (var tag in _displayedTags)
+    {
+        <li class="dropdown-item tag-dropdown-item" @onmousedown="@(_ => AddTag(tag.Name))">@tag.Name</li>
+    }
+</ul>
+
+@code {
+    private bool HideTagDropdown { get; set; } = true;
+    private string TagsString { get; set; }
+
+    private List<Tag> _displayedTags;
+
+    [Parameter]
+    public string Id { get; set; }
+
+    [Parameter]
+    public List<string> TagNames { get; set; }
+
+    [Parameter]
+    public List<Tag> AllTags { get; set; }
+
+    [Parameter]
+    public EventCallback<List<string>> TagNamesChanged { get; set; }
+
+    private List<Tag> TagsList
+    {
+        get { return TagNames.Select(tn => new Tag { Name = tn }).ToList(); }
+        set
+        {
+            TagNames = value.Select(t => t.Name).ToList();
+            TagNamesChanged.InvokeAsync(TagNames);
+        }
+    }
+
+    private List<Tag> AvailableTags
+    {
+        get
+        {
+            return AllTags == null ? [] : AllTags.ExceptBy(TagNames, t => t.Name).ToList();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _displayedTags = AvailableTags;
+    }
+
+    private async Task AddTags()
+    {
+        if (!string.IsNullOrEmpty(TagsString))
+        {
+            TagNames.AddRange(TagsString.Trim().Split(' ').Select(tn => tn.Capitalize()).ToList());
+            TagsString = string.Empty;
+            _displayedTags = AvailableTags;
+            await TagNamesChanged.InvokeAsync(TagNames);
+        }
+
+        HideTagDropdown = true;
+    }
+
+    private async Task AddTag(string tagName)
+    {
+        if (!TagNames.Contains(tagName))
+        {
+            TagNames.Add(tagName);
+        }
+
+        TagsString = string.Empty;
+        _displayedTags = AvailableTags;
+        await TagNamesChanged.InvokeAsync(TagNames);
+    }
+
+    private async Task TagInputChanged(ChangeEventArgs changeEvent)
+    {
+        TagsString = (string)changeEvent.Value;
+        var tagNames = TagsString!.Split(' ');
+
+        if (tagNames.Length > 1)
+        {
+            foreach (var tagName in tagNames[..^1])
+            {
+                await AddTag(tagName.Capitalize());
+            }
+
+            TagsString = tagNames[^1];
+        }
+
+        FilterDisplayedTags();
+        HideTagDropdown = string.IsNullOrEmpty(TagsString) || _displayedTags.Count == 0;
+    }
+
+    private void FilterDisplayedTags()
+    {
+        _displayedTags = string.IsNullOrEmpty(TagsString)
+            ? AvailableTags
+            : AvailableTags.Where(
+                t => t.Name.StartsWith(TagsString, true, CultureInfo.InvariantCulture)).ToList();
+    }
+}

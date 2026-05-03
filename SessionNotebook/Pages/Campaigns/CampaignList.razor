@@ -1,0 +1,99 @@
+﻿@page "/campaignList"
+@using DataLayer.Entities
+@using SessionNotebook.Data
+@using SessionNotebook.Services
+@inject NavigationManager Navigation
+@inject HistoryStack History
+@inject CampaignService CampaignService
+
+@if (_campaigns == null)
+{
+    <LoadingPlaceholder/>
+}
+else if (_campaigns.Any() ||  _isSearching)
+{
+    <ListSearchBar AddEntity="@AddCampaign" ListEntities="@ListCampaigns" CreateDefaultCriteria="@CreateDefaultCriteria"
+                   SortFields="@(["Name", "StartDate", "EndDate", "SessionDate", "Sessions", "UpdatedAt"])"
+                   ShowAddButton="@true">
+    
+        <table class="table table-striped mb-0">
+            <thead>
+                <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Date</th>
+                    <th scope="col">Last Session</th>
+                    <th scope="col">Session Date</th>
+                    <th scope="col"># Sessions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var campaign in _campaigns)
+                {
+                    <tr>
+                        <th scope="row"><a href="/campaign/@campaign.Id">@campaign.Name</a></th>
+                        <td>@campaign.FormatDateRange()</td>
+                        <td>
+                            @if (campaign.HasLastSession)
+                            {
+                                <a href="/session/@campaign.LastSession.Id">@GridFormatter.Format(campaign.LastSession.DisplayName)</a>
+                            }
+                            else
+                            {
+                                <span>-</span>
+                            }
+                        </td>
+                        <td>@GridFormatter.Format(campaign.LastSession?.StartDate)</td>
+                        <td>@campaign.SessionCount</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </ListSearchBar>
+}
+else
+{
+    <button @onclick="AddCampaign" class="btn btn-primary mb-2">+ New</button>
+    <p>
+        <em>You have no Campaigns yet!</em>
+    </p>
+}
+
+@code {
+    private List<Campaign> _campaigns;
+    private bool _isSearching;
+    private bool IsFullPage => Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("campaignList");
+
+    [CascadingParameter]
+    public MainLayout Layout { get; set; }
+    
+    protected override async Task OnInitializedAsync()
+    {
+        if (IsFullPage)
+        {
+            Layout.Title = "Campaigns";
+            History.Push(Navigation);
+        }
+
+        await ListCampaigns();
+    }
+
+    private void AddCampaign()
+    {
+        Navigation.NavigateTo("campaign/new");
+    }
+    
+    private async Task<int> ListCampaigns(SearchCriteria searchCriteria = null)
+    {
+        var searchResults = await CampaignService.ListCampaigns(searchCriteria);
+        _campaigns = searchResults.Results;
+        _isSearching = searchCriteria != null;
+        StateHasChanged();
+        
+        return searchResults.PageCount;
+    }
+
+    private static SearchCriteria CreateDefaultCriteria()
+    {
+        return new SearchCriteria { SortBy = "SessionDate" };
+    }
+}

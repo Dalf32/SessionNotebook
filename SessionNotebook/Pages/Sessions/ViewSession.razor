@@ -1,0 +1,59 @@
+﻿@page "/session/{sessionId:int}"
+@using DataLayer.Entities
+@using SessionNotebook.Data
+@using SessionNotebook.Services
+@using SessionNotebook.Pages.Notes
+@inject NavigationManager Navigation
+@inject HistoryStack History
+@inject CampaignService CampaignService
+@inject SessionService SessionService
+@inject NotebookState State
+
+@if (CurrentSession == null)
+{
+    <LoadingPlaceholder OnReturnClick="Return"/>
+}
+else
+{
+    <h2>@CurrentSession.DisplayName</h2>
+    <span class="small text-secondary">@CurrentSession.StartDate</span>
+    <TagSet Tags="CurrentSession.Tags"/>
+    <hr/>
+
+    <h3>Notes</h3>
+    <NoteList SessionId="SessionId"/>
+
+    <SectionContent SectionName="bottom-buttons">
+        <button @onclick="Edit" class="btn btn-primary">Edit</button>
+        <button @onclick="Return" class="btn btn-secondary">Return</button>
+    </SectionContent>
+}
+
+@code {
+    private Session CurrentSession { get; set; }
+
+    [CascadingParameter]
+    public MainLayout Layout { get; set; }
+
+    [Parameter]
+    public int SessionId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Layout.Title = "Session";
+        History.Push(Navigation);
+
+        await State.EnsureCampaignLoaded(CampaignService, sessionId: SessionId);
+        CurrentSession = await SessionService.GetSession(SessionId);
+    }
+
+    private void Return()
+    {
+        History.GoBack(Navigation, $"/campaign/{CurrentSession.CampaignId}");
+    }
+
+    private void Edit()
+    {
+        Navigation.NavigateTo($"/session/{SessionId}/edit");
+    }
+}

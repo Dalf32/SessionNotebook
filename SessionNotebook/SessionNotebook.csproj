@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+    <PropertyGroup>
+<!--        <Nullable>enable</Nullable>-->
+        <ImplicitUsings>enable</ImplicitUsings>
+        <UserSecretsId>8f01ab1f-e41f-454e-9d0c-46da722920e0</UserSecretsId>
+        <LangVersion>12</LangVersion>
+        <TargetFramework>net10.0</TargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Markdig" Version="1.1.2" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.5" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.5" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Authentication" Version="10.0.5" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Common\Common.csproj" />
+      <ProjectReference Include="..\DataLayer\DataLayer.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <_ContentIncludedByDefault Remove="wwwroot\sample-data\weather.json" />
+      <_ContentIncludedByDefault Remove="wwwroot\css\bootstrap - 5.1\bootstrap.min.css" />
+      <_ContentIncludedByDefault Remove="wwwroot\css\bootstrap - 5.1\bootstrap.min.css.map" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="wwwroot\js\bootstrap\" />
+    </ItemGroup>
+    
+</Project>

@@ -1,0 +1,121 @@
+﻿@using System.Net
+@using SessionNotebook.Pages.Errors
+@inherits LayoutComponentBase
+@inject IJSRuntime JsRuntime
+
+<PageTitle>SessionNotebook - @Title</PageTitle>
+
+<div class="page">
+    <NavMenu/>
+
+    <main class="d-flex flex-column">
+        <div class="top-row px-4 auth">
+            <h1 class="flex-100">@Title</h1>
+            <LoginDisplay/>
+            <button title="About" class="btn" data-bs-toggle="modal" data-bs-target="#aboutModal">
+                <i class="oi oi-info"></i>
+            </button>
+            <button title="Toggle theme" class="btn" @onclick="ToggleTheme">
+                <i class="oi @(_isLightMode ? "oi-moon" : "oi-sun")"></i>
+            </button>
+        </div>
+
+        <article class="content px-4">
+            <CascadingValue Value="this">
+                <ErrorBoundary Context="exception" @ref="_errorBoundary">
+                    <ChildContent>
+                        @Body
+                    </ChildContent>
+                    <ErrorContent>
+                        @if (exception is HttpRequestException
+                             {
+                                 StatusCode: HttpStatusCode.NotFound or HttpStatusCode.Unauthorized
+                             } httpEx)
+                        {
+                            switch (httpEx.StatusCode)
+                            {
+                                case HttpStatusCode.NotFound:
+                                    <ResourceNotFound/>
+                                    break;
+                                case HttpStatusCode.Unauthorized:
+                                    <ResourceUnauthorized/>
+                                    break;
+                            }
+                        }
+                        else
+                        {
+                            <UnexpectedError/>
+                        }
+                        
+                        @if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")?.ContainsIgnoreCase("Development") ?? false)
+                        {
+                            throw exception;
+                        }
+                    </ErrorContent>
+                </ErrorBoundary>
+            </CascadingValue>
+        </article>
+
+        <div class="bottom-buttons">
+            <SectionOutlet SectionName="bottom-buttons"/>
+        </div>
+    </main>
+    
+    <div id="aboutModal" class="modal fade" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content border border-3">
+                <div class="modal-header">
+                    <h1 class="modal-title fs-4">About</h1>
+                    <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <b><i>SessionNotebook</i></b> is a notetaking tool with a focus on tabletop RPGs.<br/>
+                    <b>Notes</b> are grouped by <b>Session</b>, which belong to a <b>Campaign</b>. Important people, places, or things can be created as <b>Nouns</b> and linked within Notes, allowing you to easily track where they appear. Sessions, Notes, and Nouns can all be <b>Tagged</b> as well to aid in finding them later.
+                </div>
+                <dev class="modal-footer">
+                    <i>Developed by Dalf32</i>
+                </dev>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private ErrorBoundary _errorBoundary;
+
+    private bool _isLightMode;
+    
+    private string _title;
+    public string Title
+    {
+        get => _title;
+        set
+        {
+            if (_title != value)
+            {
+                _title = value;
+                InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var theme = await JsRuntime.InvokeAsync<string>("getTheme");
+        _isLightMode = theme.EqualsIgnoreCase("light");
+        await JsRuntime.InvokeVoidAsync("setTheme", theme);
+    }
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+        _errorBoundary?.Recover();
+    }
+
+    private async Task ToggleTheme()
+    {
+        _isLightMode = !_isLightMode;
+        await JsRuntime.InvokeVoidAsync("setTheme",
+            _isLightMode ? "light" : "dark");
+    }
+}

@@ -1,0 +1,41 @@
+﻿@using DataLayer.Entities
+
+<div class="@Class">
+    @foreach (var tag in Tags)
+    {
+        @if (Edit.HasValue && Edit.Value)
+        {
+            <span class="badge rounded-pill bg-info text-dark m-1">
+                @tag.Name
+                <button type="button" class="btn-close align-middle btn-close-xs" aria-label="Close"
+                        @onclick="@(_ => RemoveTag(tag))"></button>
+            </span>
+        }
+        else
+        {
+            <a class="badge rounded-pill bg-info text-dark m-1 no-underline" href="/tag/@tag.Id">
+                @tag.Name
+            </a>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public List<Tag> Tags { get; set; }
+
+    [Parameter]
+    public bool? Edit { get; set; }
+
+    [Parameter]
+    public string Class { get; set; }
+
+    [Parameter]
+    public EventCallback<List<Tag>> TagsChanged { get; set; }
+
+    private void RemoveTag(Tag tag)
+    {
+        Tags.Remove(tag);
+        TagsChanged.InvokeAsync(Tags);
+    }
+}

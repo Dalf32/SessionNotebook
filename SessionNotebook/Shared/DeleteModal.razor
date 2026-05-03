@@ -1,0 +1,31 @@
+﻿<div id="deleteModal" class="modal fade" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border border-3">
+            <div class="modal-header">
+                <h1 class="modal-title fs-4">Delete</h1>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete @EntityType <b>@EntityName</b>?<br/>
+                @AdditionalMessage
+            </div>
+            <dev class="modal-footer">
+                <button class="btn btn-danger" data-bs-dismiss="modal" @onclick="@PerformDelete">Confirm</button>
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            </dev>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string EntityType { get; set; }
+    
+    [Parameter]
+    public string EntityName { get; set; }
+    
+    [Parameter]
+    public string AdditionalMessage { get; set; }
+    
+    [Parameter]
+    public Func<Task> PerformDelete { get; set; }
+}
