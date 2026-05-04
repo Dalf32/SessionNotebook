@@ -1,0 +1,17 @@
+﻿@page "/ResourceUnauthorized"
+@layout MainLayout
+
+<p role="alert" class="alert alert-danger lead">
+    <i class="oi oi-circle-x px-1" aria-hidden="true"></i>
+    Sorry, you don't have access to that.
+</p>
+
+@code {
+    [CascadingParameter]
+    public MainLayout Layout { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Layout.Title = "Unauthorized";
+    }
+}

@@ -1,0 +1,115 @@
+﻿@page "/sessionList/{campaignId:int}"
+@using DataLayer.Entities
+@using SessionNotebook.Data
+@using SessionNotebook.Services
+@inject NavigationManager Navigation
+@inject HistoryStack History
+@inject CampaignService CampaignService
+@inject SessionService SessionService
+@inject TagService TagService
+@inject NotebookState State
+
+@if (_sessions == null)
+{
+    <LoadingPlaceholder/>
+}
+else if (_sessions.Any() || _isSearching)
+{
+    <ListSearchBar AddEntity="@AddSession" ListEntities="@ListSessions" CreateDefaultCriteria="@CreateDefaultCriteria"
+                   Tags="@_sessionTags" SortFields="@(["Number", "Title", "Date", "Notes", "UpdatedAt"])"
+                   ShowAddButton="@IsCampaignLevel">
+
+        <table class="table table-striped mb-0">
+            <thead>
+                <tr>
+                    <th scope="col">Number</th>
+                    <th scope="col">Title</th>
+                    <th scope="col">Date</th>
+                    <th scope="col"># Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var session in _sessions)
+                {
+                    <tr>
+                        <th scope="row"><a href="/session/@session.Id">@session.Number</a></th>
+                        <td>@GridFormatter.Format(session.Title)</td>
+                        <td>@GridFormatter.Format(session.StartDate)</td>
+                        <td>@session.NoteCount</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </ListSearchBar>
+}
+else
+{
+    <button class="btn btn-primary mb-2" @onclick="AddSession">+ New</button>
+    <p>
+        <em>This Campaign has no Sessions yet!</em>
+    </p>
+}
+
+@code {
+    private List<Session> _sessions;
+    private List<Tag> _sessionTags;
+    private bool _isSearching;
+
+    private bool IsFullPage => Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("sessionList");
+    private bool IsTagLevel => TagId.HasValue;
+    private bool IsCampaignLevel => !IsTagLevel;
+
+    [Parameter]
+    public int CampaignId { get; set; }
+
+    [Parameter]
+    public int? TagId { get; set; }
+
+    [CascadingParameter]
+    public MainLayout Layout { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (IsFullPage)
+        {
+            Layout.Title = "Sessions";
+            History.Push(Navigation);
+        }
+        
+        await State.EnsureCampaignLoaded(CampaignService, campaignId: CampaignId);
+        await ListSessions();
+
+        if (IsCampaignLevel)
+        {
+            _sessionTags = await TagService.ListAllTags(State.ActiveCampaign.Id, typeof(Session));
+        }
+    }
+
+    private void AddSession()
+    {
+        State.InitializeNewSession(CampaignId,
+            _sessions.Select(s => s.Number).DefaultIfEmpty().Max() + 1);
+        Navigation.NavigateTo("session/new");
+    }
+
+    private async Task<int> ListSessions(SearchCriteria searchCriteria = null)
+    {
+        if (IsTagLevel)
+        {
+            searchCriteria ??= CreateDefaultCriteria();
+            searchCriteria.TagId = TagId!.Value;
+        }
+
+        var searchResults = await SessionService.ListSessions(CampaignId, searchCriteria);
+        _sessions = searchResults.Results;
+        _isSearching = searchCriteria != null;
+        StateHasChanged();
+
+        return searchResults.PageCount;
+    }
+
+    private static SearchCriteria CreateDefaultCriteria()
+    {
+        return new SearchCriteria { SortBy = "Number" };
+    }
+}

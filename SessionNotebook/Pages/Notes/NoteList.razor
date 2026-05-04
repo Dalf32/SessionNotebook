@@ -1,0 +1,152 @@
+﻿@page "/noteList/{sessionId:int}"
+@page "/noteList/campaign/{campaignId:int}"
+@using DataLayer.Entities
+@using SessionNotebook.Services
+@using SessionNotebook.Data
+@inject NavigationManager Navigation
+@inject HistoryStack History
+@inject CampaignService CampaignService
+@inject NoteService NoteService
+@inject TagService TagService
+@inject NounService NounService
+@inject NotebookState State
+
+@if (_notes == null || _nouns == null)
+{
+    <LoadingPlaceholder/>
+}
+else if (_notes.Any() || _isSearching)
+{
+    <ListSearchBar AddEntity="@AddNote" ListEntities="@ListNotes" CreateDefaultCriteria="@CreateDefaultCriteria"
+                   Tags="@_noteTags" SortFields="@(["Number", "Title", "UpdatedAt"])"
+                   ShowAddButton="@IsSessionLevel">
+
+        @foreach (var note in _notes)
+        {
+            <div class="card my-1">
+                <div class="card-body">
+                    <a class="card-title h5" href="/note/@note.Id">@FormatNoteNumber(note)</a>
+                    <span class="card-subtitle text-secondary mb-2">@note.Title</span>
+                    <MarkdownText Class="card-text" Text="@note.Text" NounsList="@_nouns"/>
+
+                    @if (!IsTagLevel)
+                    {
+                        <TagSet Class="note-card-tags" Tags="@note.Tags"/>
+                    }
+                </div>
+            </div>
+        }
+    </ListSearchBar>
+}
+else if (IsCampaignLevel)
+{
+    <p>
+        <em>You have no Notes yet!</em>
+    </p>
+}
+else if (IsSessionLevel)
+{
+    <button class="btn btn-primary m-2" @onclick="AddNote">+ New</button>
+    <p>
+        <em>This Session has no Notes yet!</em>
+    </p>
+}
+else
+{
+    <p>
+        <em>This is not used in any Notes yet!</em>
+    </p>
+}
+
+@code {
+    private List<Note> _notes;
+    private List<Tag> _noteTags;
+    private List<Noun> _nouns;
+    private bool _isSearching;
+
+    private bool IsFullPage => Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("noteList");
+    private bool IsCampaignLevel => CampaignId.HasValue;
+    private bool IsSessionLevel => SessionId.HasValue;
+    private bool IsNounLevel => NounId.HasValue;
+    private bool IsTagLevel => TagId.HasValue;
+
+    [CascadingParameter]
+    public MainLayout Layout { get; set; }
+
+    [Parameter]
+    public int? SessionId { get; set; }
+
+    [Parameter]
+    public int? CampaignId { get; set; }
+
+    [Parameter]
+    public int? NounId { get; set; }
+
+    [Parameter]
+    public int? TagId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (IsFullPage)
+        {
+            Layout.Title = "Notes";
+            History.Push(Navigation);
+        }
+
+        await State.EnsureCampaignLoaded(CampaignService, campaignId: CampaignId,
+            sessionId: SessionId, nounId: NounId, tagId: TagId);
+        await ListNotes();
+        _nouns = await NounService.ListAllNouns(State.ActiveCampaign.Id);
+
+        if (!IsTagLevel)
+        {
+            _noteTags = await TagService.ListAllTags(State.ActiveCampaign.Id, typeof(Note));
+        }
+    }
+
+    private string FormatNoteNumber(Note note)
+    {
+        return IsSessionLevel ? note.Number.ToString() : $"{note.Session.Number}.{note.Number}";
+    }
+
+    private void AddNote()
+    {
+        State.InitializeNewNote(SessionId!.Value,
+            _notes.Select(n => n.Number).DefaultIfEmpty().Max() + 1);
+        Navigation.NavigateTo("note/new");
+    }
+
+    private async Task<int> ListNotes(SearchCriteria searchCriteria = null)
+    {
+        if (IsTagLevel)
+        {
+            searchCriteria ??= CreateDefaultCriteria();
+            searchCriteria.TagId = TagId!.Value;
+        }
+
+        var searchResults = new SearchResults<Note> { Results = [] };
+        if (IsCampaignLevel)
+        {
+            searchResults = await NoteService.ListNotes(CampaignId!.Value, searchCriteria);
+        }
+        else if (IsSessionLevel)
+        {
+            searchResults = await NoteService.ListNotesForSession(SessionId!.Value, searchCriteria);
+        }
+        else if (IsNounLevel)
+        {
+            searchResults = await NoteService.ListNotesForNoun(NounId!.Value, searchCriteria);
+        }
+
+        _notes = searchResults.Results;
+        _isSearching = searchCriteria != null;
+        StateHasChanged();
+        
+        return searchResults.PageCount;
+    }
+
+    private static SearchCriteria CreateDefaultCriteria()
+    {
+        return new SearchCriteria { SortBy = "Number" };
+    }
+}

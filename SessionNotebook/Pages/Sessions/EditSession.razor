@@ -1,0 +1,143 @@
+﻿@page "/session/new"
+@page "/session/{sessionId:int}/edit"
+@using SessionNotebook.Services
+@using DataLayer.Entities
+@using SessionNotebook.Data
+@inject NavigationManager Navigation
+@inject CampaignService CampaignService
+@inject SessionService SessionService
+@inject TagService TagService
+@inject NotebookState State
+
+@if (IsEdit && CurrentSession == null)
+{
+    <LoadingPlaceholder OnCancelClick="Cancel"/>
+}
+else
+{
+    <EditForm id="session-form" Model="@CurrentSession" OnValidSubmit="Save">
+        <DataAnnotationsValidator/>
+
+        <fieldset disabled="@IsDisabled">
+            <div class="form-div">
+                <label for="session-number" class="form-label">Number</label>
+                <InputNumber id="session-number" class="form-control" @bind-Value="CurrentSession.Number"/>
+                <ValidationMessage For="() => CurrentSession.Number"/>
+            </div>
+
+            <div class="form-div">
+                <label for="session-title" class="form-label">Title</label>
+                <InputText id="session-title" class="form-control" @bind-Value="CurrentSession.Title"/>
+            </div>
+
+            <div class="form-div">
+                <label for="session-startDate" class="form-label">Date</label>
+                <InputDate id="session-startDate" class="form-control" @bind-Value="CurrentSession.StartDate"/>
+            </div>
+
+            <div class="form-div">
+                <label for="session-tags" class="form-label">Tags</label>
+                <TagsEditor Id="session-tags" @bind-TagNames="_tagsList" AllTags="@_sessionTags"/>
+            </div>
+        </fieldset>
+
+        <SectionContent SectionName="bottom-buttons">
+            <button form="session-form" type="submit" class="btn btn-success">Save</button>
+            <button class="btn btn-secondary" @onclick="Cancel">Cancel</button>
+            @if (IsEdit)
+            {
+                <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">Delete</button>
+            }
+        </SectionContent>
+    </EditForm>
+    
+    <DeleteModal EntityType="Session" EntityName="@CurrentSession.DisplayName" PerformDelete="@Delete"
+                 AdditionalMessage="@DeleteAdditionalMessage"/>
+}
+
+@code {
+    private Session CurrentSession { get; set; }
+    private bool IsDisabled { get; set; }
+    private bool IsEdit => SessionId.HasValue;
+
+    private string DeleteAdditionalMessage
+    {
+        get
+        {
+            if (CurrentSession.NoteCount == 0)
+            {
+                return "This Session has no Notes";
+            }
+            
+            var isSingular = CurrentSession.NoteCount == 1;
+            return $"This Session has {CurrentSession.NoteCount} {(isSingular ? "Note. It" : "Notes. They")} will be removed upon deletion.";
+        }
+    }
+    
+    private List<string> _tagsList;
+    private List<Tag> _sessionTags;
+
+    [CascadingParameter]
+    public MainLayout Layout { get; set; }
+
+    [Parameter]
+    public int? SessionId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Layout.Title = "Session";
+        
+        if (IsEdit)
+        {
+            await State.EnsureCampaignLoaded(CampaignService, sessionId: SessionId);
+            CurrentSession = await SessionService.GetSession(SessionId!.Value);
+            _tagsList = CurrentSession.Tags == null ? []
+                :
+                CurrentSession.Tags.Select(t => t.Name).ToList();
+        }
+        else
+        {
+            CurrentSession = State.NewSession;
+            _tagsList = [];
+        }
+
+        _sessionTags = await TagService.ListAllTags(CurrentSession.CampaignId, typeof(Session));
+    }
+
+    private async Task Save(EditContext obj)
+    {
+        IsDisabled = true;
+        UpdateSessionTags();
+        var savedTags = await TagService.SaveTags(CurrentSession.Tags);
+
+        CurrentSession = await SessionService.SaveSession(CurrentSession);
+        await SessionService.UpdateTags(CurrentSession.Id, savedTags);
+
+        State.ClearNewObjects();
+        Navigation.NavigateTo($"/session/{CurrentSession.Id}");
+    }
+
+    private void Cancel()
+    {
+        State.ClearNewObjects();
+        Navigation.NavigateTo(IsEdit ? $"/session/{CurrentSession.Id}" : $"/campaign/{State.ActiveCampaign.Id}");
+    }
+
+    private async Task Delete()
+    {
+        await SessionService.DeleteSession(CurrentSession.Id);
+        SessionId = null;
+
+        Navigation.NavigateTo($"/campaign/{State.ActiveCampaign.Id}");
+    }
+
+    private void UpdateSessionTags()
+    {
+        TagService.UpdateTags(CurrentSession.Tags, _tagsList, tn => new Tag
+        {
+            CampaignId = CurrentSession.CampaignId,
+            Name = tn,
+            IsSessionTag = true
+        });
+    }
+}

@@ -1,0 +1,198 @@
+﻿@using DataLayer.Entities
+@using SessionNotebook.Data
+
+<div class="hstack gap-3 search-header border">
+    @if (ShowAddButton)
+    {
+        <button class="btn btn-primary m-2" @onclick="AddEntity">+ New</button>
+    }
+    <button class="btn btn-dark m-2 ms-auto" @onclick="ResetSearchCriteria">Reset</button>
+
+    @if (Tags != null && Tags.Any())
+    {
+        <div class="hstack gap-1">
+            <label for="filter-dropdown">Filter By:</label>
+            <InputSelect id="filter-dropdown" class="btn dropdown-toggle search-dropdown-button"
+                         @bind-Value="_searchCriteria.TagId" @bind-Value:after="PerformSearch">
+                <option class="dropdown-item search-dropdown-item" value="">None</option>
+                @foreach (var tag in Tags)
+                {
+                    <option class="dropdown-item search-dropdown-item" value="@tag.Id">@tag.Name</option>
+                }
+            </InputSelect>
+        </div>
+    }
+
+    <EditForm class="hstack gap-1" role="search" Model="_searchCriteria" OnValidSubmit="Search">
+        <InputText id="search-query" type="search" class="form-control" @bind-Value="_searchCriteria.Query"/>
+        <button type="submit" class="btn btn-light">Search</button>
+    </EditForm>
+
+    @if (SortFields != null && SortFields.Any())
+    {
+        <div>
+            <label for="sort-dropdown">Sort By:</label>
+            <InputSelect id="sort-dropdown" class="btn dropdown-toggle search-dropdown-button"
+                         @bind-Value="_searchCriteria.SortBy" @bind-Value:after="PerformSearch">
+                @foreach (var field in SortFields)
+                {
+                    <option class="dropdown-item search-dropdown-item" value="@field">@field.SpaceWords()</option>
+                }
+            </InputSelect>
+        </div>
+        <button class="btn sort-dir-button me-2" title="Toggle sort direction" @onclick="@(_ => ToggleSortDir())">
+            <i class="oi @(_searchCriteria.IsSortAscending ? "oi-arrow-top" : "oi-arrow-bottom")"></i>
+        </button>
+    }
+</div>
+
+@ChildContent
+
+<div class="hstack search-footer border">
+    <ul class="pagination m-2 me-auto">
+        <li class="@(_searchCriteria.PageNumber == 1 ? "page-item disabled" : "page-item")">
+            <a class="page-link " @onclick="@(() => GoToPage(_searchCriteria.PageNumber - 1))">Previous</a>
+        </li>
+        @for (var s = 0; s < Pages.Count; s++)
+        {
+            @foreach (var i in Pages[s])
+            {
+                var pageNum = i;
+                @if (i == _searchCriteria.PageNumber)
+                {
+                    <li class="page-item active" aria-current="page">
+                        <a class="page-link" @onclick="@(() => GoToPage(pageNum))">@pageNum</a>
+                    </li>
+                }
+                else
+                {
+                    <li class="page-item">
+                        <a class="page-link" @onclick="@(() => GoToPage(pageNum))">@pageNum</a>
+                    </li>
+                }
+            }
+            @if (s < Pages.Count - 1)
+            {
+                <li class="page-item disabled"><a class="page-link">...</a></li>
+            }
+        }
+        <li class="@(_searchCriteria.PageNumber == PageCount ? "page-item disabled" : "page-item")">
+            <a class="page-link" @onclick="@(() => GoToPage(_searchCriteria.PageNumber + 1))">Next</a>
+        </li>
+    </ul>
+    <div class="hstack gap-1">
+        <label for="paging-dropdown">Results Per Page:</label>
+        <InputSelect id="paging-dropdown" class="btn dropdown-toggle search-dropdown-button me-2"
+                     @bind-Value="_searchCriteria.PageSize" @bind-Value:after="@(() => GoToPage(1))">
+            <option class="dropdown-item search-dropdown-item" value="10">10</option>
+            <option class="dropdown-item search-dropdown-item" value="25">25</option>
+            <option class="dropdown-item search-dropdown-item" value="50">50</option>
+            <option class="dropdown-item search-dropdown-item" value="100">100</option>
+        </InputSelect>
+    </div>
+</div>
+
+@code {
+    private SearchCriteria _searchCriteria;
+    private const int MaxPages = 9;
+    private int PageCount { get; set; } = 1;
+
+    private List<List<int>> Pages
+    {
+        get
+        {
+            //There aren't too many pages so show all
+            if (PageCount <= MaxPages)
+            {
+                return [Enumerable.Range(1, PageCount).ToList()];
+            }
+            
+            const int halfPages = MaxPages / 2;
+            const int quarterPages = MaxPages / 4;
+
+            //The current page is very near the beginning or end so simple split
+            if (_searchCriteria.PageNumber <= quarterPages + 1 ||
+                PageCount - _searchCriteria.PageNumber < quarterPages)
+            {
+                return [Enumerable.Range(1, halfPages + 1).ToList(),
+                    Enumerable.Range(PageCount - halfPages + 1, halfPages).ToList()];
+            }
+            
+            //The current page is in the front half so 2 uneven splits
+            if (_searchCriteria.PageNumber <= halfPages + 1)
+            {
+                var startRange = Enumerable.Range(1, _searchCriteria.PageNumber + 2).ToList();
+                var endCount = MaxPages - startRange.Count;
+                return [startRange, Enumerable.Range(PageCount - endCount + 1, endCount).ToList()];
+            }
+
+            //The current page is in the back half so 2 uneven splits
+            if (_searchCriteria.PageNumber >= PageCount - halfPages)
+            {
+                var endRange = Enumerable.Range(_searchCriteria.PageNumber - 2, PageCount - _searchCriteria.PageNumber + 3).ToList();
+                var startCount = MaxPages - endRange.Count;
+                return [Enumerable.Range(1, startCount).ToList(), endRange];
+            }
+            
+            //The current page is in the middle so 3 splits
+            return [Enumerable.Range(1, 2).ToList(),
+                    Enumerable.Range(_searchCriteria.PageNumber - 2, halfPages + 1).ToList(),
+                    Enumerable.Range(PageCount - 1, 2).ToList()];
+        }
+    }
+    
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+    
+    [Parameter]
+    public Action AddEntity { get; set; }
+
+    [Parameter]
+    public Func<SearchCriteria, Task<int>> ListEntities { get; set; }
+
+    [Parameter]
+    public Func<SearchCriteria> CreateDefaultCriteria { get; set; }
+
+    [Parameter]
+    public List<Tag> Tags { get; set; }
+
+    [Parameter]
+    public List<string> SortFields { get; set; }
+
+    [Parameter]
+    public bool ShowAddButton { get; set; } = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _searchCriteria = CreateDefaultCriteria();
+        await PerformSearch();
+    }
+
+    private async Task PerformSearch()
+    {
+        PageCount = await ListEntities(_searchCriteria);
+    }
+
+    private async Task Search(EditContext obj = null)
+    {
+        await PerformSearch();
+    }
+
+    private async Task ToggleSortDir()
+    {
+        _searchCriteria.IsSortAscending = !_searchCriteria.IsSortAscending;
+        await PerformSearch();
+    }
+
+    private async Task ResetSearchCriteria()
+    {
+        _searchCriteria = CreateDefaultCriteria();
+        await PerformSearch();
+    }
+
+    private async Task GoToPage(int pageNum)
+    {
+        _searchCriteria.PageNumber = pageNum;
+        await PerformSearch();
+    }
+}

@@ -1,0 +1,101 @@
+﻿@page "/campaign/new"
+@page "/campaign/{campaignId:int}/edit"
+@using DataLayer.Entities
+@using SessionNotebook.Data
+@using SessionNotebook.Services
+@inject NavigationManager Navigation
+@inject CampaignService CampaignService
+@inject NotebookState State
+
+@if (IsEdit && CurrentCampaign == null)
+{
+    <LoadingPlaceholder/>
+}
+else
+{
+    <EditForm id="campaign-form" Model="@CurrentCampaign" OnValidSubmit="Save">
+        <DataAnnotationsValidator/>
+
+        <fieldset disabled="@IsDisabled">
+            <div class="form-div">
+                <label for="campaign-name" class="form-label">Name</label>
+                <InputText id="campaign-name" class="form-control" @bind-Value="CurrentCampaign.Name"/>
+                <ValidationMessage For="() => CurrentCampaign.Name"/>
+            </div>
+
+            <div class="form-div">
+                <label for="campaign-description" class="form-label">Description</label>
+                <InputTextArea id="campaign-description" class="form-control" @bind-Value="CurrentCampaign.Description"/>
+            </div>
+
+            <div class="form-div">
+                <label for="campaign-startDate" class="form-label">Start Date</label>
+                <InputDate id="campaign-startDate" class="form-control" @bind-Value="CurrentCampaign.StartDate"/>
+            </div>
+
+            <div class="form-div">
+                <label for="campaign-endDate" class="form-label">End Date</label>
+                <InputDate id="campaign-endDate" class="form-control" @bind-Value="CurrentCampaign.EndDate"/>
+            </div>
+        </fieldset>
+
+        <SectionContent SectionName="bottom-buttons">
+            <button form="campaign-form" type="submit" class="btn btn-success">Save</button>
+            <button @onclick="Cancel" class="btn btn-secondary">Cancel</button>
+            @if (IsEdit)
+            {
+                <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">Delete</button>
+            }
+        </SectionContent>
+    </EditForm>
+    
+    <DeleteModal EntityType="Campaign" EntityName="@CurrentCampaign.Name" PerformDelete="@Delete"
+                 AdditionalMessage="All Sessions, Notes, Nouns, and Tags belonging to this Campaign will also be deleted."/>
+}
+
+@code {
+    private Campaign CurrentCampaign { get; set; }
+    private bool IsDisabled { get; set; }
+    private bool IsEdit => CampaignId.HasValue;
+    
+    [CascadingParameter]
+    public MainLayout Layout { get; set; }
+
+    [Parameter]
+    public int? CampaignId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Layout.Title = "Campaign";
+
+        CurrentCampaign = new Campaign();
+        if (IsEdit)
+        {
+            CurrentCampaign = await CampaignService.GetCampaign(CampaignId!.Value);
+            State.ActiveCampaign = CurrentCampaign;
+        }
+    }
+
+    private async Task Save(EditContext obj)
+    {
+        IsDisabled = true;
+        CurrentCampaign = await CampaignService.SaveCampaign(CurrentCampaign);
+        State.ActiveCampaign = CurrentCampaign;
+
+        Navigation.NavigateTo($"/campaign/{CurrentCampaign.Id}");
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo(IsEdit ? $"/campaign/{CurrentCampaign.Id}" : "/campaignList");
+    }
+
+    private async Task Delete()
+    {
+        await CampaignService.DeleteCampaign(CurrentCampaign.Id);
+        CampaignId = null;
+        State.ActiveCampaign = null;
+
+        Navigation.NavigateTo("/campaignList");
+    }
+}

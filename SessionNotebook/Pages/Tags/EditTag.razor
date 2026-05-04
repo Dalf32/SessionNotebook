@@ -1,0 +1,132 @@
+﻿@page "/tag/new"
+@page "/tag/{tagId:int}/edit"
+@using DataLayer.Entities
+@using SessionNotebook.Data
+@using SessionNotebook.Services
+@inject NavigationManager Navigation
+@inject CampaignService CampaignService
+@inject TagService TagService
+@inject NotebookState State
+
+@if (IsEdit && CurrentTag == null)
+{
+    <LoadingPlaceholder OnCancelClick="Cancel"/>
+}
+else
+{
+    <EditForm id="tag-form" Model="@CurrentTag" OnValidSubmit="Save">
+        <DataAnnotationsValidator/>
+
+        <fieldset disabled="@IsDisabled">
+            <div class="form-div">
+                <label for="tag-name" class="form-label">Name</label>
+                <InputText id="tag-name" class="form-control" @bind-Value="CurrentTag.Name"
+                           @onblur="@(_ => CapitalizeName())"/>
+                <ValidationMessage For="() => CurrentTag.Name"/>
+            </div>
+
+            <div class="form-div">
+                <label for="tag-descr" class="form-label">Description</label>
+                <InputTextArea id="tag-descr" class="form-control" @bind-Value="CurrentTag.Description"/>
+            </div>
+
+            <h5>Available For</h5>
+            <div class="form-check form-check-inline">
+                <input type="checkbox" id="session-checkbox" class="form-check-input" @bind="CurrentTag.IsSessionTag">
+                <label for="session-checkbox" class="form-check-label">Sessions</label>
+            </div>
+
+            <div class="form-check form-check-inline">
+                <input type="checkbox" id="note-checkbox" class="form-check-input" @bind="CurrentTag.IsNoteTag">
+                <label for="note-checkbox" class="form-check-label">Notes</label>
+            </div>
+
+            <div class="form-check form-check-inline">
+                <input type="checkbox" id="noun-checkbox" class="form-check-input" @bind="CurrentTag.IsNounTag">
+                <label for="noun-checkbox" class="form-check-label">Nouns</label>
+            </div>
+        </fieldset>
+
+        <SectionContent SectionName="bottom-buttons">
+            <button form="tag-form" type="submit" class="btn btn-success">Save</button>
+            <button class="btn btn-secondary" @onclick="Cancel">Cancel</button>
+            @if (IsEdit)
+            {
+                <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">Delete</button>
+            }
+        </SectionContent>
+    </EditForm>
+    
+    <DeleteModal EntityType="Tag" EntityName="@CurrentTag.Name" PerformDelete="@Delete"
+                 AdditionalMessage="@DeleteAdditionalMessage"/>
+}
+
+@code {
+    private Tag CurrentTag { get; set; }
+    private bool IsDisabled { get; set; }
+    private bool IsEdit => TagId.HasValue;
+
+    private string DeleteAdditionalMessage
+    {
+        get
+        {
+            if (CurrentTag.UsageCount == 0)
+            {
+                return "This Tag is not used";
+            }
+            
+            var isSingular = CurrentTag.UsageCount == 1;
+            return $"{CurrentTag.UsageCount} {(isSingular ? "item is" : "items are")} tagged with this. The Tag will be removed where used upon deletion.";
+        }
+    }
+
+    [CascadingParameter]
+    public MainLayout Layout { get; set; }
+
+    [Parameter]
+    public int? TagId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Layout.Title = "Tag";
+
+        await State.EnsureCampaignLoaded(CampaignService, tagId: TagId);
+        
+        if (IsEdit)
+        {
+            CurrentTag = await TagService.GetTag(TagId!.Value);
+        }
+        else
+        {
+            CurrentTag = State.NewTag;
+        }
+    }
+
+    private async Task Save(EditContext obj)
+    {
+        IsDisabled = true;
+        CurrentTag = await TagService.SaveTag(CurrentTag);
+
+        State.ClearNewObjects();
+        Navigation.NavigateTo($"/tag/{CurrentTag.Id}");
+    }
+
+    private void Cancel()
+    {
+        State.ClearNewObjects();
+        Navigation.NavigateTo(IsEdit ? $"/tag/{CurrentTag.Id}" : $"/tagList/{CurrentTag.CampaignId}");
+    }
+
+    private async Task Delete()
+    {
+        await TagService.DeleteTag(CurrentTag.Id);
+        TagId = null;
+
+        Navigation.NavigateTo($"/tagList/{CurrentTag.CampaignId}");
+    }
+
+    private void CapitalizeName()
+    {
+        CurrentTag.Name = CurrentTag.Name.Capitalize();
+    }
+}

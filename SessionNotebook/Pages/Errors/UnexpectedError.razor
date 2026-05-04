@@ -1,0 +1,17 @@
+﻿@page "/UnexpectedError"
+@layout MainLayout
+
+<p role="alert" class="alert alert-danger lead">
+    <i class="oi oi-fire px-1" aria-hidden="true"></i>
+    An unexpected error occurred.
+</p>
+
+@code {
+    [CascadingParameter]
+    public MainLayout Layout { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Layout.Title = "Error";
+    }
+}

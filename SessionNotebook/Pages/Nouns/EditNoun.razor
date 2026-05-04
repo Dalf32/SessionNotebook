@@ -1,0 +1,144 @@
+﻿@page "/noun/new"
+@page "/noun/{nounId:int}/edit"
+@using DataLayer.Entities
+@using SessionNotebook.Data
+@using SessionNotebook.Services
+@inject NavigationManager Navigation
+@inject CampaignService CampaignService
+@inject NounService NounService
+@inject TagService TagService
+@inject NotebookState State
+
+@if (IsEdit && CurrentNoun == null)
+{
+    <LoadingPlaceholder OnCancelClick="Cancel"/>
+}
+else
+{
+    <EditForm id="noun-form" Model="@CurrentNoun" OnValidSubmit="Save">
+        <DataAnnotationsValidator/>
+
+        <fieldset disabled="@IsDisabled">
+            <div class="form-div">
+                <label for="noun-name" class="form-label">Name</label>
+                <InputText id="noun-name" class="form-control" @bind-Value="CurrentNoun.Name"/>
+                <ValidationMessage For="() => CurrentNoun.Name"/>
+            </div>
+
+            <div class="form-div">
+                <label for="noun-synopsis" class="form-label">Synopsis</label>
+                <InputText id="noun-synopsis" class="form-control" @bind-Value="CurrentNoun.Synopsis"/>
+                <ValidationMessage For="() => CurrentNoun.Synopsis"/>
+            </div>
+
+            <div class="form-div">
+                <label for="noun-tags" class="form-label">Tags</label>
+                <TagsEditor Id="noun-tags" @bind-TagNames="_tagsList" AllTags="@_nounTags"/>
+            </div>
+
+            <div class="form-div">
+                <label for="noun-descr" class="form-label">Description</label>
+                <InputTextArea id="noun-descr" class="form-control" @bind-Value="CurrentNoun.Description"/>
+            </div>
+        </fieldset>
+
+        <SectionContent SectionName="bottom-buttons">
+            <button form="noun-form" type="submit" class="btn btn-success">Save</button>
+            <button class="btn btn-secondary" @onclick="Cancel">Cancel</button>
+            @if (IsEdit)
+            {
+                <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">Delete</button>
+            }
+        </SectionContent>
+    </EditForm>
+    
+    <DeleteModal EntityType="Noun" EntityName="@CurrentNoun.Name" PerformDelete="@Delete"
+                 AdditionalMessage="@DeleteAdditionalMessage"/>
+}
+
+@code {
+    private Noun CurrentNoun { get; set; }
+    private bool IsDisabled { get; set; }
+    private bool IsEdit => NounId.HasValue;
+
+    private string DeleteAdditionalMessage
+    {
+        get
+        {
+            if (CurrentNoun.NoteCount == 0)
+            {
+                return "This Noun is not referenced.";
+            }
+            
+            var isSingular = CurrentNoun.NoteCount == 1;
+            return $"This Noun is referenced in {CurrentNoun.NoteCount} {(isSingular ? "Note. That link" : "Notes. Those links")} will break upon deletion.";
+        }
+    }
+    
+    private List<string> _tagsList;
+    private List<Tag> _nounTags;
+
+    [CascadingParameter]
+    public MainLayout Layout { get; set; }
+
+    [Parameter]
+    public int? NounId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Layout.Title = "Noun";
+
+        await State.EnsureCampaignLoaded(CampaignService, nounId: NounId);
+        
+        if (IsEdit)
+        {
+            CurrentNoun = await NounService.GetNoun(NounId!.Value);
+            _tagsList = CurrentNoun.Tags == null ? [] :
+                CurrentNoun.Tags.Select(t => t.Name).ToList();
+        }
+        else
+        {
+            CurrentNoun = State.NewNoun;
+            _tagsList = [];
+        }
+
+        _nounTags = await TagService.ListAllTags(CurrentNoun.CampaignId, typeof(Noun));
+    }
+
+    private async Task Save(EditContext obj)
+    {
+        IsDisabled = true;
+        UpdateNounTags();
+        var savedTags = await TagService.SaveTags(CurrentNoun.Tags);
+
+        CurrentNoun = await NounService.SaveNoun(CurrentNoun);
+        await NounService.UpdateTags(CurrentNoun.Id, savedTags);
+
+        State.ClearNewObjects();
+        Navigation.NavigateTo($"/noun/{CurrentNoun.Id}");
+    }
+
+    private void Cancel()
+    {
+        State.ClearNewObjects();
+        Navigation.NavigateTo(IsEdit ? $"/noun/{CurrentNoun.Id}" : $"/nounList/{CurrentNoun.CampaignId}");
+    }
+
+    private async Task Delete()
+    {
+        await NounService.DeleteNoun(CurrentNoun.Id);
+        NounId = null;
+
+        Navigation.NavigateTo($"/nounList/{CurrentNoun.CampaignId}");
+    }
+
+    private void UpdateNounTags()
+    {
+        TagService.UpdateTags(CurrentNoun.Tags, _tagsList, tn => new Tag
+        {
+            CampaignId = CurrentNoun.CampaignId,
+            Name = tn,
+            IsNounTag = true
+        });
+    }
+}

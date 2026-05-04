@@ -1,0 +1,30 @@
+﻿
+<div class="accordion @Class">
+    <div class="accordion-item">
+        <h2 class="accordion-header">
+            <button class="accordion-button @(IsCollapsed ? "collapsed" : "")" type="button" aria-controls="collapsible-body"
+                    @onclick="@(_ => IsCollapsed = !IsCollapsed)">
+                @Header
+            </button>
+        </h2>
+        <div id="collapsible-body" class="accordion-collapse @(IsCollapsed ? "collapse" : "")">
+            <div class="accordion-body">
+                @ChildContent
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+    [Parameter]
+    public string Header { get; set; }
+
+    [Parameter]
+    public bool IsCollapsed { get; set; } = true;
+
+    [Parameter]
+    public string Class { get; set; }
+}

@@ -1,0 +1,88 @@
+﻿@using SessionNotebook.Data
+@inject NotebookState State
+
+<div class=@(_collapseNavMenu ? "sidebar-collapsed" : "sidebar")>
+    <div class="top-row ps-3 navbar navbar-dark">
+        <div class="container-fluid">
+            @if (!_collapseNavMenu)
+            {
+                <a class="navbar-brand" href="">SessionNotebook</a>
+            }
+            <button title="@(_collapseNavMenu ? "Expand" : "Collapse") Navigation Menu"
+                    class="btn btn-sm navbar-brand m-0 navbar-collapse-btn" @onclick="ToggleNavMenu">
+                <i class="oi @(_collapseNavMenu ? "oi-expand-left" : "oi-collapse-left")"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="nav-scrollable">
+        <nav class="flex-column">
+            <div class="@NavItemCss">
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                    <NavIcon IconClass="nav-icon oi oi-home" Text="Home" IsCollapsed="@_collapseNavMenu"></NavIcon>
+                </NavLink>
+            </div>
+            <AuthorizeView>
+                <Authorized>
+                    <div class="@NavItemCss">
+                        @if (State.IsCampaignActive && !_collapseNavMenu)
+                        {
+                            <NavLink class="nav-link" href=@($"campaign/{State.ActiveCampaign.Id}")>
+                                <i class="nav-icon oi oi-book" title="Campaign" aria-hidden="true"></i>
+                                <span class="line-height-1"><b>Campaign</b>
+                                    <br/><i>@State.ActiveCampaign.Name</i>
+                                </span>
+                            </NavLink>
+                        }
+                        else
+                        {
+                            <NavLink class="nav-link" href="campaignList">
+                                <NavIcon IconClass="nav-icon oi oi-book" Text="Campaign" IsCollapsed="@_collapseNavMenu"></NavIcon>
+                            </NavLink>
+                        }
+                    </div>
+                    @if (State.IsCampaignActive)
+                    {
+                        <div class="@NavItemIndentedCss">
+                            <NavLink class="nav-link" href=@($"sessionList/{State.ActiveCampaign.Id}")>
+                                <NavIcon IconClass="nav-icon oi oi-list-rich" Text="Sessions" IsCollapsed="@_collapseNavMenu"></NavIcon>
+                            </NavLink>
+                        </div>
+                        <div class="@NavItemIndentedCss">
+                            <NavLink class="nav-link" href=@($"noteList/campaign/{State.ActiveCampaign.Id}")>
+                                <NavIcon IconClass="nav-icon oi oi-script" Text="Notes" IsCollapsed="@_collapseNavMenu"></NavIcon>
+                            </NavLink>
+                        </div>
+                        <div class="@NavItemIndentedCss">
+                            <NavLink class="nav-link" href=@($"nounList/{State.ActiveCampaign.Id}")>
+                                <NavIcon IconClass="nav-icon oi oi-people" Text="Nouns" IsCollapsed="@_collapseNavMenu"></NavIcon>
+                            </NavLink>
+                        </div>
+                        <div class="@NavItemIndentedCss">
+                            <NavLink class="nav-link" href=@($"tagList/{State.ActiveCampaign.Id}")>
+                                <NavIcon IconClass="nav-icon oi oi-tags" Text="Tags" IsCollapsed="@_collapseNavMenu"></NavIcon>
+                            </NavLink>
+                        </div>
+                    }
+                </Authorized>
+            </AuthorizeView>
+        </nav>
+    </div>
+</div>
+
+@code {
+    private bool _collapseNavMenu;
+    
+    private string NavItemCss => _collapseNavMenu ? "nav-item px-2" : "nav-item px-3";
+    private string NavItemIndentedCss => _collapseNavMenu ? "nav-item px-2" : "nav-item px-5";
+
+    private void ToggleNavMenu()
+    {
+        _collapseNavMenu = !_collapseNavMenu;
+    }
+
+    protected override void OnInitialized()
+    {
+        State.OnActiveCampaignChanged += StateHasChanged;
+    }
+}

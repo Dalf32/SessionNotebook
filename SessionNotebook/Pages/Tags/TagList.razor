@@ -1,0 +1,88 @@
+﻿@page "/tagList/{campaignId:int}"
+@using DataLayer.Entities
+@using SessionNotebook.Data
+@using SessionNotebook.Services
+@inject NavigationManager Navigation
+@inject HistoryStack History
+@inject CampaignService CampaignService
+@inject TagService TagService
+@inject NotebookState State
+
+@if (_tags == null)
+{
+    <LoadingPlaceholder/>
+}
+else if (_tags.Any() || _isSearching)
+{
+    <ListSearchBar AddEntity="@AddTag" ListEntities="@ListTags" CreateDefaultCriteria="@CreateDefaultCriteria"
+                   SortFields="@(["Name", "Usages", "UpdatedAt"])">
+
+        <table class="table table-striped mb-0">
+            <thead>
+                <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Description</th>
+                    <th scope="col"># Usages</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var tag in _tags)
+                {
+                    <tr>
+                        <th scope="row"><a href="/tag/@tag.Id">@tag.Name</a></th>
+                        <td>@GridFormatter.Format(tag.Description)</td>
+                        <td>@tag.UsageCount</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </ListSearchBar>
+}
+else
+{
+    <button class="btn btn-primary mb-2" @onclick="AddTag">+ New</button>
+    <p>
+        <em>You have no Tags yet!</em>
+    </p>
+}
+
+@code {
+    private List<Tag> _tags;
+    private bool _isSearching;
+
+    [Parameter]
+    public int CampaignId { get; set; }
+
+    [CascadingParameter]
+    public MainLayout Layout { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Layout.Title = "Tags";
+        History.Push(Navigation);
+
+        await State.EnsureCampaignLoaded(CampaignService, campaignId: CampaignId);
+        await ListTags();
+    }
+
+    private void AddTag()
+    {
+        State.InitializeNewTag(CampaignId);
+        Navigation.NavigateTo("tag/new");
+    }
+
+    private async Task<int> ListTags(SearchCriteria searchCriteria = null)
+    {
+        var searchResults = await TagService.ListTags(CampaignId, criteria: searchCriteria);
+        _tags = searchResults.Results;
+        _isSearching = searchCriteria != null;
+        StateHasChanged();
+        
+        return searchResults.PageCount;
+    }
+
+    private static SearchCriteria CreateDefaultCriteria()
+    {
+        return new SearchCriteria { SortBy = "Name", IsSortAscending = true };
+    }
+}

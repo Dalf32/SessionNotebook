@@ -1,0 +1,29 @@
+﻿<div class="d-flex align-items-center">
+    <em role="status" class="loading-text">Loading...</em>
+    <div class="spinner-border" aria-hidden="true"></div>
+</div>
+
+@if (IncludeReturnButton || IncludeCancelButton)
+{
+    <SectionContent SectionName="bottom-buttons">
+        @if (IncludeReturnButton)
+        {
+            <button class="btn btn-secondary" @onclick="OnReturnClick">Return</button>
+        }
+        @if (IncludeCancelButton)
+        {
+            <button class="btn btn-secondary" @onclick="OnCancelClick">Cancel</button>
+        }
+    </SectionContent>
+}
+
+@code {
+    [Parameter]
+    public Action OnReturnClick { get; set; }
+
+    [Parameter]
+    public Action OnCancelClick { get; set; }
+
+    private bool IncludeReturnButton => OnReturnClick != null;
+    private bool IncludeCancelButton => OnCancelClick != null;
+}

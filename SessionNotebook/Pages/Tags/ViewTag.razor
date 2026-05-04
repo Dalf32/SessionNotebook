@@ -1,0 +1,102 @@
+﻿@page "/tag/{tagId:int}"
+@using DataLayer.Entities
+@using SessionNotebook.Data
+@using SessionNotebook.Services
+@using SessionNotebook.Pages.Sessions
+@using SessionNotebook.Pages.Notes
+@using SessionNotebook.Pages.Nouns
+@inject NavigationManager Navigation
+@inject HistoryStack History
+@inject CampaignService CampaignService
+@inject TagService TagService
+@inject NotebookState State
+
+@if (CurrentTag == null)
+{
+    <LoadingPlaceholder OnReturnClick="Return"/>
+}
+else
+{
+    <h2>@CurrentTag.Name</h2>
+    <hr/>
+    <p class="text-body">@CurrentTag.Description</p>
+
+    <h5>Available For</h5>
+    <div class="form-check form-check-inline">
+        <input type="checkbox" id="session-checkbox" class="form-check-input" checked="@CurrentTag.IsSessionTag" disabled>
+        <label for="session-checkbox" class="form-check-label full-opacity">Sessions</label>
+    </div>
+
+    <div class="form-check form-check-inline">
+        <input type="checkbox" id="note-checkbox" class="form-check-input" checked="@CurrentTag.IsNoteTag" disabled>
+        <label for="note-checkbox" class="form-check-label full-opacity">Notes</label>
+    </div>
+
+    <div class="form-check form-check-inline">
+        <input type="checkbox" id="noun-checkbox" class="form-check-input" checked="@CurrentTag.IsNounTag" disabled>
+        <label for="noun-checkbox" class="form-check-label full-opacity">Nouns</label>
+    </div>
+
+    <h3 class="mt-3">Usages</h3>
+    @if (CurrentTag.Sessions.Count > 0)
+    {
+        <Collapsible Class="usage-accordion my-4" Header="Sessions">
+            <SessionList CampaignId="@CurrentTag.CampaignId" TagId="@TagId"/>
+        </Collapsible>
+    }
+
+    @if (CurrentTag.Notes.Count > 0)
+    {
+        <Collapsible Class="usage-accordion my-4" Header="Notes">
+            <NoteList CampaignId="@CurrentTag.CampaignId" TagId="@TagId"/>
+        </Collapsible>
+    }
+
+    @if (CurrentTag.Nouns.Count > 0)
+    {
+        <Collapsible Class="usage-accordion my-4" Header="Nouns">
+            <NounList CampaignId="@CurrentTag.CampaignId" TagId="@TagId"/>
+        </Collapsible>
+    }
+
+    @if (CurrentTag.Sessions.Count == 0 && CurrentTag.Notes.Count == 0 && CurrentTag.Nouns.Count == 0)
+    {
+        <p>
+            <em>This is not used anywhere yet!</em>
+        </p>
+    }
+
+    <SectionContent SectionName="bottom-buttons">
+        <button @onclick="Edit" class="btn btn-primary">Edit</button>
+        <button @onclick="Return" class="btn btn-secondary">Return</button>
+    </SectionContent>
+}
+
+@code {
+    private Tag CurrentTag { get; set; }
+
+    [CascadingParameter]
+    public MainLayout Layout { get; set; }
+
+    [Parameter]
+    public int TagId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Layout.Title = "Tag";
+        History.Push(Navigation);
+
+        await State.EnsureCampaignLoaded(CampaignService, tagId: TagId);
+        CurrentTag = await TagService.GetTag(TagId);
+    }
+
+    private void Return()
+    {
+        History.GoBack(Navigation, $"/tagList/{CurrentTag.CampaignId}");
+    }
+
+    private void Edit()
+    {
+        Navigation.NavigateTo($"/tag/{TagId}/edit");
+    }
+}
